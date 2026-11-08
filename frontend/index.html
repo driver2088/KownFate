@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知天命 · 早知命早改命</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@300;400;600;700;900&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="paper-grain"></div>
+
+<header class="site-head">
+  <div class="brand" id="brandHome" title="回到首页">
+    <span class="seal-mark">知</span>
+    <span class="brand-name">知天命</span>
+    <span class="brand-slogan">早知命 · 早改命</span>
+  </div>
+  <nav class="main-nav" id="mainNav" hidden>
+    <button class="nav-tab" data-view="chart">命 盘</button>
+    <button class="nav-tab" data-view="chat">疑 问</button>
+    <button class="nav-tab" data-view="archive">存 档</button>
+  </nav>
+  <div class="head-right">
+    <span class="user-chip" id="userChip" hidden></span>
+    <button class="btn-ghost" id="logoutBtn" hidden>退出</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ 未登录：首页 + 登录/注册 ============ -->
+<section id="view-landing" class="view">
+  <div class="hero">
+    <div class="hero-glow"></div>
+    <p class="hero-tag">独家算法 · 子平真诠 · AI 答疑</p>
+    <h1 class="hero-title">一 命 一 世界<br>早知命，早改命</h1>
+    <p class="hero-sub">输入生辰与出生地，为你排出四柱八字、五行十神、强弱喜用；<br>
+      以五道题校验命格真伪，三轮打磨，确认属于你的命盘；再向 AI 知微先生垂问事业、婚恋、流年大事。</p>
+    <div class="hero-stats">
+      <div><b>四柱</b><i>年月日时 · 藏干十神</i></div>
+      <div><b>五行</b><i>力量格局 · 喜用神</i></div>
+      <div><b>大运</b><i>十年一阶 · 吉凶节奏</i></div>
+      <div><b>三问</b><i>AI 先生 · 大事答疑</i></div>
+    </div>
+  </div>
+
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">登 录</button>
+      <button class="auth-tab" data-tab="register">注 册</button>
+    </div>
+    <form id="authForm" autocomplete="off">
+      <label>用户名<input id="authUser" type="text" placeholder="道号 / 昵称" maxlength="20" required></label>
+      <label>密 码<input id="authPass" type="password" placeholder="至少 6 位" required></label>
+      <button type="submit" class="btn-gold" id="authSubmit">进入知天命</button>
+      <p class="form-msg" id="authMsg"></p>
+    </form>
+  </div>
+</section>
+
+<!-- ============ 排盘表单 ============ -->
+<section id="view-onboard" class="view" hidden>
+  <h2 class="sec-title">八字排盘 <small>命 由 天 定，运 在 己 手</small></h2>
+  <div class="card onboard-card">
+    <div class="field-grid">
+      <label class="field">出生日期
+        <input type="date" id="obDate" min="1900-01-01" required></label>
+      <label class="field">出生时间
+        <input type="time" id="obTime" required></label>
+      <label class="field">出生地
+        <select id="obCity" required></select></label>
+      <div class="field">性别
+        <div class="radio-pill">
+          <label><input type="radio" name="obGender" value="男" checked><span>男</span></label>
+          <label><input type="radio" name="obGender" value="女"><span>女</span></label>
+        </div>
+      </div>
+    </div>
+    <p class="hint">※ 排盘将按出生地经度校正真太阳时；子时（23 点后）出生的流派争议，会在校验轮次中复核。</p>
+    <button class="btn-gold big" id="obStart">排盘 · 起 局</button>
+  </div>
+</section>
+
+<!-- ============ 命盘 + 校验 ============ -->
+<section id="view-chart" class="view" hidden>
+  <div class="chart-head">
+    <h2 class="sec-title" id="chartTitle">命 盘</h2>
+    <div class="round-badge" id="roundBadge"></div>
+  </div>
+  <p class="variant-note" id="variantNote"></p>
+  <div id="chartBody"></div>
+</section>
+
+<!-- ============ AI 答疑 ============ -->
+<section id="view-chat" class="view" hidden>
+  <h2 class="sec-title">疑问 · 大事答疑 <small>每 次 咨 询 以 三 轮 为 契</small></h2>
+  <div class="chat-layout">
+    <div class="card chat-box">
+      <div class="chat-top">
+        <span class="ai-name">知微先生</span>
+        <span class="round-dots" id="roundDots" title="咨询轮次"></span>
+        <button class="btn-ghost sm" id="newChatBtn" hidden>开启新咨询</button>
+      </div>
+      <div class="chat-msgs" id="chatMsgs">
+        <div class="msg assistant"><div class="bubble">缘主请坐。你的命格我已阅尽——事业进退、姻缘早晚、流年趋避，心中有何大事，问将出来。</div></div>
+      </div>
+      <div class="chat-input" id="chatInputArea">
+        <textarea id="chatText" rows="2" maxlength="600" placeholder="限600字，问事业、婚恋、财运、流年……"></textarea>
+        <button class="btn-gold" id="chatSend">开 问</button>
+      </div>
+      <p class="chat-counter" id="chatCounter"></p>
+    </div>
+    <aside class="card chat-side">
+      <h4>本次咨询须知</h4>
+      <ul class="dot-list">
+        <li>命格档案已注入 AI 上下文，答语皆本于你的八字。</li>
+        <li>每次咨询限 <b>3</b> 轮，一轮一问一答。</li>
+        <li>对话全文自动存档，可随时回看。</li>
+      </ul>
+      <div id="convListWrap"><h4>过往咨询</h4><div class="conv-list" id="convList"></div></div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 存档 ============ -->
+<section id="view-archive" class="view" hidden>
+  <h2 class="sec-title">命 格 档 案</h2>
+  <div class="archive-grid">
+    <div class="card"><h4>排盘记录</h4><div id="archiveCharts"></div></div>
+  </div>
+</section>
+
+</main>
+
+<div class="footer">知天命 · 早知命早改命 ｜ 本站内容由算法与 AI 生成，仅供文化参考与娱乐</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="overlay-inner">
+    <div class="taiji"></div>
+    <p id="overlayText">天 人 交 感 ， 正 在 推 演 …</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

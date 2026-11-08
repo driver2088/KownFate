@@ -1,0 +1,11 @@
+# 密钥与本地数据，绝不入库
+.env
+data/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# 系统/编辑器
+.DS_Store

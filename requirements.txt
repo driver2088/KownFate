@@ -1,0 +1,9 @@
+anthropic==2.6.0
+bcrypt==5.0.0
+fastapi==0.162.2
+lunar-python==1.4.9
+pydantic==2.14.3
+pyjwt==2.15.1
+python-dotenv==1.2.4
+starlette==1.10.0
+uvicorn==0.54.0
