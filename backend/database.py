@@ -9,7 +9,8 @@ from . import config
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  nickname TEXT,
   password_hash TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
@@ -67,16 +68,16 @@ def now():
 
 
 # ---------- users ----------
-def create_user(username, pw_hash):
+def create_user(email, nickname, pw_hash):
     with conn() as c:
-        cur = c.execute("INSERT INTO users(username, password_hash, created_at) VALUES(?,?,?)",
-                        (username, pw_hash, now()))
+        cur = c.execute("INSERT INTO users(email, nickname, password_hash, created_at) VALUES(?,?,?,?)",
+                        (email, nickname, pw_hash, now()))
         return cur.lastrowid
 
 
-def get_user(username):
+def get_user(email):
     with conn() as c:
-        return c.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        return c.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
 
 
 def get_user_by_id(uid):
@@ -107,6 +108,12 @@ def update_chart_feedback(chart_id, answers, reject_rate, status, is_final=False
         if is_final:
             c.execute("UPDATE charts SET is_final=0 WHERE user_id=(SELECT user_id FROM charts WHERE id=?) AND id!=? AND status='confirmed'",
                       (chart_id, chart_id))
+
+
+def set_chart_json(chart_id, chart):
+    with conn() as c:
+        c.execute("UPDATE charts SET chart_json=? WHERE id=?",
+                  (json.dumps(chart, ensure_ascii=False), chart_id))
 
 
 def get_chart(chart_id):

@@ -78,21 +78,40 @@ $$(".auth-tab").forEach(btn => btn.addEventListener("click", () => {
   S.authMode = btn.dataset.tab;
   $$(".auth-tab").forEach(b => b.classList.toggle("active", b === btn));
   $("#authSubmit").textContent = S.authMode === "login" ? "进入知天命" : "立 卷 · 注 册";
+  $("#nickRow").hidden = S.authMode !== "register";
+  $("#authPass").autocomplete = S.authMode === "login" ? "current-password" : "new-password";
   $("#authMsg").textContent = "";
 }));
 
+/* ---------- 登录弹窗：首页默认不展示，需要时唤起 ---------- */
+function openAuth(mode) {
+  $("#authModal").hidden = false;
+  if (mode) { const t = $(`.auth-tab[data-tab="${mode}"]`); if (t) t.click(); }
+  setTimeout(() => $("#authEmail").focus(), 60);
+}
+function closeAuth() { $("#authModal").hidden = true; $("#authMsg").textContent = ""; }
+$("#heroStart").addEventListener("click", () => openAuth());
+$("#loginBtn").addEventListener("click", () => openAuth());
+$("#authClose").addEventListener("click", closeAuth);
+$("#authModal").addEventListener("click", e => { if (e.target === $("#authModal")) closeAuth(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeAuth(); });
+
 $("#authForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const username = $("#authUser").value.trim();
+  const email = $("#authEmail").value.trim();
   const password = $("#authPass").value;
-  if (!username || !password) return;
+  if (!email || !password) return;
   $("#authSubmit").disabled = true;
   try {
-    const data = await api(`/api/auth/${S.authMode}`, { method: "POST", body: JSON.stringify({ username, password }) });
+    const body = S.authMode === "register"
+      ? { email, password, nickname: $("#authNick").value.trim() || null }
+      : { email, password };
+    const data = await api(`/api/auth/${S.authMode}`, { method: "POST", body: JSON.stringify(body) });
     S.token = data.token;
     localStorage.setItem("kf_token", S.token);
     S.user = data.user;
     await afterLogin();
+    closeAuth();
   } catch (err) {
     $("#authMsg").textContent = err.message;
   } finally {
@@ -104,6 +123,8 @@ $("#logoutBtn").addEventListener("click", () => {
   localStorage.removeItem("kf_token");
   S.token = ""; S.user = null; S.payload = null; S.convId = null;
   $("#logoutBtn").hidden = true; $("#userChip").hidden = true; $("#mainNav").hidden = true;
+  $("#loginBtn").hidden = false;
+  closeAuth();
   setView("landing");
 });
 $("#brandHome").addEventListener("click", () => {
@@ -115,9 +136,10 @@ async function afterLogin() {
   const me = await api("/api/auth/me");
   S.user = me.user; S.hasFinal = me.has_final_chart;
   $("#userChip").hidden = false;
-  $("#userChip").innerHTML = `缘主 <b>${esc(me.user.username)}</b>`;
+  $("#userChip").innerHTML = `缘主 <b>${esc(me.user.nickname || me.user.email)}</b>`;
   $("#logoutBtn").hidden = false;
   $("#mainNav").hidden = false;
+  $("#loginBtn").hidden = true;
   if (me.has_final_chart) {
     S.payload = await api("/api/chart/current");
     renderChart(true);
@@ -138,14 +160,48 @@ async function loadCities() {
   ).join("");
   sel.value = "北京";
 }
+
+/* ---------- 农历输入 ---------- */
+const LUNAR_MONTHS = ["正月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "冬月", "腊月"];
+function lunarDayName(n) {
+  if (n <= 10) return "初" + "一二三四五六七八九十"[n - 1];
+  if (n <= 20) return (n === 20 ? "二十" : "十" + "一二三四五六七八九"[n - 11]);
+  if (n < 30) return "廿" + "一二三四五六七八九"[n - 21];
+  return "三十";
+}
+(function initLunarFields() {
+  $("#obLM").innerHTML = LUNAR_MONTHS.map((n, i) => `<option value="${i + 1}">${n}</option>`).join("");
+  $("#obLD").innerHTML = Array.from({ length: 30 }, (_, i) =>
+    `<option value="${i + 1}">${lunarDayName(i + 1)}</option>`).join("");
+  $$('input[name="obCal"]').forEach(r => r.addEventListener("change", () => setCal(r.value)));
+})();
+function setCal(mode) {
+  $("#wrapDateSolar").hidden = mode !== "solar";
+  $("#wrapDateLunar").hidden = mode !== "lunar";
+}
+const curCal = () => document.querySelector('input[name="obCal"]:checked').value;
 $("#obStart").addEventListener("click", async () => {
-  const date = $("#obDate").value, time = $("#obTime").value;
+  const cal = curCal();
+  let date;
+  if (cal === "lunar") {
+    const ly = $("#obLY").value, ld = $("#obLD").value;
+    if (!ly || !ld) return toast("农历出生日期须填全年 / 日");
+    date = `${ly}-${String($("#obLM").value).padStart(2, "0")}-${String(ld).padStart(2, "0")}`;
+  } else {
+    date = $("#obDate").value;
+  }
+  const time = $("#obTime").value;
   if (!date || !time) return toast("出生日期与时间须填全");
   const gender = document.querySelector('input[name="obGender"]:checked').value;
+  $("#obNotice").hidden = true;
   overlay(true, "天 人 交 感 · 正 在 起 局 …");
   try {
     S.payload = await api("/api/chart/start", {
-      method: "POST", body: JSON.stringify({ date, time, city: $("#obCity").value, gender }),
+      method: "POST",
+      body: JSON.stringify({
+        date, time, city: $("#obCity").value, gender,
+        calendar: cal, leap: cal === "lunar" && $("#obLL").checked,
+      }),
     });
     S.answers = {};
     renderChart(false);
@@ -229,6 +285,7 @@ function renderChart(confirmed) {
         <div class="xy-chip yong"><small>用 神</small><b>${xy.yong_shen}</b>·${xy.yong_shen_shishen}</div>
         ${xy.xi_shen.length ? `<div class="xy-chip"><small>喜 神</small>${xy.xi_shen.map(e => `<b>${e}</b>`).join(" ")}</div>` : ""}
         <div class="xy-chip ji"><small>忌 神</small>${xy.ji_shen.map(e => `<b>${e}</b>`).join(" ")}</div>
+        ${xy.adjusted_by === "ai" ? `<div class="xy-chip" style="border-color:var(--accent);color:var(--accent)">AI 复核改判</div>` : ""}
       </div>
       <p class="xy-advice">
         利行业：<b>${esc(xy.advice.industry)}</b><br>
@@ -246,7 +303,7 @@ function renderChart(confirmed) {
         <span class="dy-luck ${d.luck}">${d.luck}</span>
         <div class="dy-gz">${d.ganzhi}</div>
         <div class="dy-ss">${d.gan_shishen}运</div>
-        <div class="dy-years">${d.start_year}–${d.end_year}<br>${d.start_age} 岁</div>
+        <div class="dy-years">${d.start_year}–${d.end_year}</div>
       </div>`).join("")}
     </div></div>`;
 
@@ -291,13 +348,19 @@ function renderChart(confirmed) {
 }
 
 /* ---------- 校验面板 ---------- */
+const ROUND_FOCUS = {
+  1: "本轮为初排命盘",
+  2: "本轮命盘已由 AI 复核、重定喜用",
+  3: "本轮命盘经 AI 综合审定，为终审之轮",
+};
 function renderVerifyPanel() {
   const p = S.payload;
   return `<div class="card verify-panel" id="verifyPanel">
     <div class="verify-title"><h3>命格校验 · 第 ${p.round} 轮</h3>
-      <span>${p.statements.length} 道判断题</span></div>
-    <p class="verify-desc">以下断语皆由你的四柱推演而来。请逐条核对——若半数以上与你不符，
-      本站将更换排盘流派重算五行、十神、强弱与喜用神，最多三轮，直至命格贴合其人。</p>
+      <span>${p.statements.length} 题（性情际遇 ×2 · 大运流年 ×3）</span></div>
+    <p class="verify-desc">${ROUND_FOCUS[p.round] || ""}——以下断语皆由你的四柱推演而来，请逐条核对。
+      <b>5 题至少 4 题符合即定案</b>；未达标时，你的校验结果将交 AI 依子平命理重新核定强弱与喜用，必要时更换推算方法重算。
+      <b>三轮打磨仍未达标则本次不予存档</b>——请核对出生日期与时辰后重新提交。</p>
     ${p.statements.map(st => `
       <div class="stmt" data-id="${st.id}">
         <span class="stmt-cat">${st.category}</span>
@@ -328,7 +391,7 @@ function answerStmt(id, val, btn) {
 async function submitVerify() {
   const stmts = S.payload.statements;
   const answers = stmts.map(st => !!S.answers[st.id]);
-  overlay(true, "命 理 推 勘 · 复 核 原 局 …");
+  overlay(true, "校 验 汇 呈 · AI 复 核 命 格 …");
   try {
     const res = await api(`/api/chart/${S.payload.chart_id}/feedback`, {
       method: "POST", body: JSON.stringify({ answers }),
@@ -336,11 +399,37 @@ async function submitVerify() {
     if (res.done) {
       S.payload = res; S.hasFinal = true;
       renderChart(true);
-      toast(`校验通过（否定 ${Math.round(res.reject_rate * 100)}%），命格已定案`);
+      toast(`校验通过（算准 ${res.agree}/${S.payload.statements.length || 5} 题），命格已定案`);
+    } else if (res.failed) {
+      const inp = (S.payload && S.payload.chart && S.payload.chart.input) || {};
+      S.payload = null; S.answers = {}; S.hasFinal = false;
+      if (inp.date) {
+        if (inp.calendar === "lunar") {
+          document.querySelector('input[name="obCal"][value="lunar"]').checked = true;
+          setCal("lunar");
+          const [ly, lm, ld] = inp.date.split("-");
+          $("#obLY").value = ly; $("#obLM").value = Number(lm); $("#obLD").value = Number(ld);
+          $("#obLL").checked = !!inp.leap;
+        } else {
+          document.querySelector('input[name="obCal"][value="solar"]').checked = true;
+          setCal("solar");
+          $("#obDate").value = inp.date;
+        }
+      }
+      if (inp.time) $("#obTime").value = inp.time;
+      if (inp.city) $("#obCity").value = inp.city;
+      if (inp.gender) {
+        const r = document.querySelector(`input[name="obGender"][value="${inp.gender}"]`);
+        if (r) r.checked = true;
+      }
+      const n = $("#obNotice");
+      n.textContent = res.message; n.hidden = false;
+      setView("onboard");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
       S.payload = res; S.answers = {};
       renderChart(false);
-      toast(res.recomputed_reason, 4200);
+      toast(res.recomputed_reason, 5200);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   } catch (err) {
@@ -421,6 +510,28 @@ $("#chatText").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
 });
 
+/* 解析 SSE 流：event: meta|delta|done|error */
+async function readSSE(res, onEvent) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const blocks = buf.split("\n\n");
+    buf = blocks.pop();
+    for (const blk of blocks) {
+      let ev = "message", data = "";
+      for (const line of blk.split("\n")) {
+        if (line.startsWith("event:")) ev = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (data) onEvent(ev, JSON.parse(data));
+    }
+  }
+}
+
 async function sendChat() {
   const text = $("#chatText").value.trim();
   if (!text) return;
@@ -429,19 +540,41 @@ async function sendChat() {
 
   const box = $("#chatMsgs");
   box.insertAdjacentHTML("beforeend", `<div class="msg user"><div class="bubble">${esc(text)}</div></div>`);
-  box.insertAdjacentHTML("beforeend", `<div class="msg assistant" id="pending"><div class="bubble typing"><i></i><i></i><i></i></div></div>`);
+  box.insertAdjacentHTML("beforeend",
+    `<div class="msg assistant" id="pending"><div class="bubble typing"><i></i><i></i><i></i></div></div>`);
   box.scrollTop = box.scrollHeight;
+  const pend = $("#pending .bubble");
+  let acc = "", doneData = null, errData = null;
 
   try {
-    const res = await api("/api/chat/send", {
-      method: "POST", body: JSON.stringify({ conversation_id: S.convId, text }),
+    const headers = { "Content-Type": "application/json" };
+    if (S.token) headers.Authorization = "Bearer " + S.token;
+    const res = await fetch("/api/chat/stream", {
+      method: "POST", headers, body: JSON.stringify({ conversation_id: S.convId, text }),
     });
-    S.convId = res.conversation_id;
-    S.roundsUsed = res.rounds_used;
+    if (!res.ok) {
+      let detail = `请求失败（${res.status}）`;
+      try { detail = (await res.json()).detail || detail; } catch (e) {}
+      const err = new Error(detail); err.status = res.status; throw err;
+    }
+    await readSSE(res, (ev, d) => {
+      if (ev === "meta") S.convId = d.conversation_id;
+      else if (ev === "delta") {
+        acc += d.text;
+        pend.classList.remove("typing");
+        pend.textContent = acc;                 // 流式期间纯文本，结束后再渲染 markdown
+        box.scrollTop = box.scrollHeight;
+      }
+      else if (ev === "done") doneData = d;
+      else if (ev === "error") errData = d;
+    });
+    if (errData) { const err = new Error(errData.message); err.status = errData.status; throw err; }
+
+    const reply = (doneData && doneData.reply) || acc;
     $("#pending").remove();
-    box.insertAdjacentHTML("beforeend", `<div class="msg assistant"><div class="bubble">${mdLite(res.reply)}</div></div>`);
+    box.insertAdjacentHTML("beforeend", `<div class="msg assistant"><div class="bubble">${mdLite(reply)}</div></div>`);
     box.scrollTop = box.scrollHeight;
-    renderMsgsFromDom(res.closed);
+    if (doneData) { S.roundsUsed = doneData.rounds_used; renderMsgsFromDom(doneData.closed); }
   } catch (err) {
     $("#pending")?.remove();
     box.insertAdjacentHTML("beforeend", `<div class="msg system"><div class="bubble">${esc(err.message)}</div></div>`);
@@ -482,7 +615,7 @@ async function loadArchive() {
         <span class="cr-pillars">${gz}</span>
         <span class="cr-meta">第 ${r.round} 轮 · ${esc(r.variant_note)}<br>
           ${r.reject_rate != null ? `否定率 ${Math.round(r.reject_rate * 100)}% · ` : ""}${r.created_at.slice(0, 16).replace("T", " ")}</span>
-        <span class="status-tag ${r.status}">${r.status === "confirmed" ? "已定案" : r.status === "rejected" ? "已重算" : "待校验"}</span>
+        <span class="status-tag ${r.status}">${{ confirmed: "已定案", rejected: "已重算", failed: "未定案" }[r.status] || "待校验"}</span>
         ${r.is_final ? `<span class="status-tag final">现行命格</span>` : ""}
         <button class="btn-ghost sm" onclick="viewArchivedChart(${r.chart_id})">查看</button>
       </div>`);
@@ -522,5 +655,6 @@ $$(".nav-tab").forEach(btn => btn.addEventListener("click", () => {
       S.token = "";
     }
   }
+  $("#loginBtn").hidden = false;
   setView("landing");
 })();
