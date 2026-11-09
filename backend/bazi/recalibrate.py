@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
-"""命格校验未通过时的 AI 复核：把校验结果连同命盘交给大模型，
-要求它依据子平命理重新核定强弱与喜用神。
+"""命格校验相关的 AI 服务。
 
-三轮复核主旨递进（命主所见即三轮打磨路径）：
-  第 1 轮以扶抑为主，调候参校；第 2 轮改以调候为主，扶抑参校；
-  第 3 轮综合两派，就命主历轮反馈折衡定盘。
-
-返回合法 JSON 则用于 engine.apply_ai_adjustment 重排岁运；
-失败/未配置密钥返回 None，由调用方回退到流派重排（VARIANTS）。
+1. choose_statements(chart)：AI 出题——从大运表与流年信号池中挑选
+   5 个已发生、信号清晰、可核对的时段写断言（大运 1~2 条、流年补足）；
+   返回 None 时由调用方回退 interpret.statements 的本地模板出题。
+2. recalibrate(...)：校验未通过时的 AI 复核——把校验结果连同命盘交给
+   大模型，要求它依据子平命理重新核定强弱与喜用神。三轮复核主旨递进：
+   第 1 轮以扶抑为主，调候参校；第 2 轮改以调候为主，扶抑参校；
+   第 3 轮综合两派，就命主历轮反馈折衡定盘。
+   返回合法 JSON 则用于 engine.apply_ai_adjustment 重排岁运；
+   失败/未配置密钥返回 None，由调用方回退到流派重排（VARIANTS）。
 """
 import json
 import re
+from datetime import datetime
 
 from .. import ai, config
 from . import interpret, tables as T
@@ -48,6 +51,76 @@ def _system_for(round_no):
 
 def focus_label(round_no):
     return FOCUS.get(round_no, FOCUS[3])[1]
+
+
+CHOOSE_SYSTEM = """你是子平命理大家，正在为命主出「命格校验」题。
+给定其四柱、喜忌、大运表与流年信号（score 由岁运干支对喜忌计分推得，冲=岁支冲日支或月支）。
+任务：从**已经发生**的大运与流年中，挑选信号最清晰、命主最易判断的 5 个时段，各写一条断言。
+要求：
+1. 大运断言 1~2 条（讲十年基调），流年断言补足其余（单年事件感更强）；
+2. 每条必须绑定具体年份或大运起止，写出该段干支与命主当时岁数；
+3. 依十神象义落到实事：官杀主职务与压力、财星主钱与家庭、食伤主表达技术、印主学业长辈平台、比劫主同侪竞争合伙；
+4. 吉凶直言，不许两头堵：喜用得力之年断顺境与成就，忌神相冲之年断阻力、变动、紧绷；
+5. 禁止巴纳姆泛语（"有过起伏""遇到抉择"这类无法核对的措辞）；
+6. 只依据给定信号选时段，不得虚构年份、不得改动四柱。
+只输出一个 JSON 对象，不要其他文字：
+{"items": [{"category": "大运|流年", "text": "断语"}, ...]}，items 恰 5 条、按时间先后排列。"""
+
+
+def _year_signals_block(chart):
+    dy = [f"  {d['start_year']}-{d['end_year']} {d['ganzhi']}运（天干{d['gan_shishen']}，断{d['luck']}）"
+          for d in chart["dayun"] if d["start_year"] <= datetime.now().year]
+    past = [p for p in (chart.get("past_years") or []) if abs(p["score"]) >= 1 or p.get("clash")]
+    py = [f"  {p['year']} {p['ganzhi']}（{p['age']}岁）score={p['score']}{'，冲' if p.get('clash') else ''}"
+          for p in past[-30:]]
+    return "已行大运：\n" + "\n".join(dy) + "\n近年流年信号（有信号者）：\n" + "\n".join(py)
+
+
+def choose_statements(chart):
+    """AI 从大运流年中选 5 段清晰可判的时段写断言；不合法/不可用时返回 None。"""
+    client = ai.get_client()
+    if client is None:
+        return None
+    birth_year = int(chart["input"]["date"][:4])
+    this_year = datetime.now().year
+    user_prompt = f"""当前 {this_year} 年。命主 {chart['input']['gender']}，生于 {chart['plot_time']}。
+{interpret.summary_text(chart)}
+
+{_year_signals_block(chart)}
+
+请挑选并出题，只输出 JSON。"""
+    try:
+        resp = client.messages.create(
+            model=config.CLAUDE_MODEL, max_tokens=8000,
+            system=CHOOSE_SYSTEM, messages=[{"role": "user", "content": user_prompt}])
+        text = "".join(b.text for b in resp.content if b.type == "text")
+    except Exception:
+        return None
+
+    data = _extract_json(text)
+    items = (data or {}).get("items")
+    if not isinstance(items, list) or len(items) != 5:
+        return None
+    dy_n = sum(1 for it in items if isinstance(it, dict) and it.get("category") == "大运")
+    if not (1 <= dy_n <= 2):          # 大运 1~2 条，其余流年
+        return None
+    allowed = set(range(birth_year, this_year + 1))
+    allowed |= {d["end_year"] for d in chart["dayun"] if d["start_year"] <= this_year}
+    seen_years = set()
+    for it in items:
+        if not isinstance(it, dict) or it.get("category") not in ("大运", "流年"):
+            return None
+        t = str(it.get("text", "")).strip()
+        ys = re.findall(r"\d{4}", t)
+        if not (20 <= len(t) <= 160) or not ys:
+            return None
+        if any(int(y) not in allowed for y in ys):    # 年份必须在真实池内
+            return None
+        seen_years.update(int(y) for y in ys)
+    if len(seen_years) < 4:                            # 至少 4 个不同年份，防复读
+        return None
+    return [{"id": i + 1, "category": it["category"], "text": it["text"].strip()}
+            for i, it in enumerate(items)]
 
 
 def _extract_json(text):

@@ -342,10 +342,15 @@ const ROUND_FOCUS = {
 };
 function renderVerifyPanel() {
   const p = S.payload;
+  const nDy = p.statements.filter(s => s.category === "大运").length;
+  const yunOnly = p.statements.every(s => s.category === "大运" || s.category === "流年");
+  const tip = yunOnly
+    ? (nDy ? `大运 ×${nDy} · 流年 ×${p.statements.length - nDy}，皆为已发生之事，凭记忆可核对`
+           : "皆为已发生的关键流年，凭记忆可核对")
+    : "性情际遇与岁运判断";
   return `<div class="card verify-panel" id="verifyPanel">
     <div class="verify-title"><h3>命格校验 · 第 ${p.round} 轮</h3>
-      <span>${p.statements.length} 题 · ${p.statements.every(s => s.category === "流年")
-        ? "皆为已发生的关键流年，凭记忆可核对" : "性情际遇与岁运判断"}</span></div>
+      <span>${p.statements.length} 题 · ${tip}</span></div>
     <p class="verify-desc">${ROUND_FOCUS[p.round] || ""}——以下断语皆由你的四柱推演而来，请逐条核对。
       <b>5 题至少 4 题符合即定案</b>；未达标时，你的校验结果将交 AI 依子平命理重新核定强弱与喜用，必要时更换推算方法重算。
       <b>三轮打磨仍未达标则本次不予存档</b>——请核对出生日期与时辰后重新提交。</p>

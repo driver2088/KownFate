@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """排盘 → 校验 → 重拟（最多三轮）→ 定案 的命格流程。
 
-校验共 5 题（2 题性格/事业感情 + 3 题大运流年），5 题至少 4 题符合才定案；
+校验共 5 题（由 AI 从已发生的大运与流年中择题写断言，AI 不可用时回退本地模板），5 题至少 4 题符合才定案；
 未通过优先请 AI 依子平复核喜用并重评岁运——推演主旨逐轮递变：一轮扶抑为主（定式排盘）、
 二轮调候为主、三轮综合两派；AI 不可用时回退流派重排。
 """
@@ -99,10 +99,19 @@ def _payload(row):
     }
 
 
+def _pick_statements(chart):
+    """出题：优先由 AI 从大运流年挑 5 段清晰可判的时段写断言；
+    AI 不可用或输出不合契约时回退本地模板出题。"""
+    stmts = recalibrate.choose_statements(chart)
+    if stmts and len(stmts) == 5:
+        return stmts
+    return interpret.statements(chart)[:5]
+
+
 def _build(birth, gender, variant):
     chart = engine.compute(birth, gender, variant)
     f = interpret.fortune(chart)
-    stmts = interpret.statements(chart)
+    stmts = _pick_statements(chart)
     return chart, f, stmts
 
 
@@ -176,6 +185,8 @@ def feedback(chart_id: int, body: FeedbackIn, user=Depends(get_current_user)):
                    "note": f"校验未过，AI 依子平复核重定喜用，重取用神为{chart['xiyong']['yong_shen']}",
                    "focus": calib["school"], "reason": calib.get("reason", "")}
         method = "ai"
+        f = interpret.fortune(chart)
+        stmts_new = _pick_statements(chart)   # 喜用已变，题面随新盘重择
     else:
         variant = engine.VARIANTS[min(next_round, MAX_VERIFY_ROUNDS) - 1]
         if next_round == MAX_VERIFY_ROUNDS:
@@ -186,9 +197,6 @@ def feedback(chart_id: int, body: FeedbackIn, user=Depends(get_current_user)):
         chart, f, stmts_new = _build(birth, gender, variant)
         chart["verify_history"] = history
         method = "variant"
-
-    f = interpret.fortune(chart)
-    stmts_new = interpret.statements(chart)[:5]
     new_id = db.save_chart(user["id"], next_round, birth, variant, chart, f, stmts_new)
     db.update_chart_feedback(chart_id, body.answers, reject_rate, "rejected", is_final=False)
 
