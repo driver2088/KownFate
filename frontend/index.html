@@ -64,12 +64,22 @@
   </div>
 </div>
 
-<!-- ============ 排盘表单 ============ -->
-<section id="view-onboard" class="view" hidden>
-  <h2 class="sec-title">八字排盘 <small>命 由 天 定，运 在 己 手</small></h2>
-  <p class="ob-notice" id="obNotice" hidden></p>
-  <div class="card onboard-card">
-    <div class="field-grid">
+<!-- ============ 命盘 + 校验 ============ -->
+<section id="view-chart" class="view" hidden>
+  <div class="chart-head">
+    <h2 class="sec-title" id="chartTitle">命 盘</h2>
+    <div class="round-badge" id="roundBadge"></div>
+  </div>
+  <p class="variant-note" id="variantNote"></p>
+  <div id="chartBody"></div>
+
+  <!-- 排盘信息弹窗：在命盘页上按需弹出；已有定案命盘默认不弹 -->
+  <div class="modal-scrim" id="onboardModal" hidden>
+    <div class="card onboard-card">
+      <button class="modal-x" id="obClose" type="button" aria-label="关闭">×</button>
+      <h2 class="sec-title">八字排盘 <small>命 由 天 定，运 在 己 手</small></h2>
+      <p class="ob-notice" id="obNotice" hidden></p>
+      <div class="field-grid">
       <div class="field field-span">历法
         <div class="radio-pill">
           <label><input type="radio" name="obCal" value="solar" checked><span>公历</span></label>
@@ -99,17 +109,8 @@
     </div>
     <p class="hint">※ 支持公历 / 农历（含闰月）录入，农历自动换算公历；排盘按出生地经度校正真太阳时，时辰争议（如子时早晚）会在校验轮次中复核。</p>
     <button class="btn-gold big" id="obStart">排盘 · 起 局</button>
+    </div>
   </div>
-</section>
-
-<!-- ============ 命盘 + 校验 ============ -->
-<section id="view-chart" class="view" hidden>
-  <div class="chart-head">
-    <h2 class="sec-title" id="chartTitle">命 盘</h2>
-    <div class="round-badge" id="roundBadge"></div>
-  </div>
-  <p class="variant-note" id="variantNote"></p>
-  <div id="chartBody"></div>
 </section>
 
 <!-- ============ AI 答疑 ============ -->

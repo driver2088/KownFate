@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""依据命盘生成命格断语（性格/事业/感情/大运）与五道校验题。
+"""依据命盘生成命格断语（性格/父母/事业/感情/大运）与五道校验题。
 
 校验题结构：第 1-2 题为性格与事业/感情（择一），第 3-5 题为关键大运流年判断。
 """
@@ -69,6 +69,24 @@ def fortune(chart):
     if chart["taohua"]:
         romance += f"逢{chart['taohua']}（桃花）之年，人缘感情之事明显活跃。"
 
+    # ---------- 父母（印星为母、财星为父，月柱为父母宫） ----------
+    seal_s = chart["group_score"]["印星"]
+    fatherwealth_s = chart["group_score"]["财星"]
+    mother = ("印星得力：母亲（或抚养你的长辈）在家中说话有分量，升学择业等大事历来由她把关，年长后仍会听她的。"
+              if seal_s >= 8 else
+              "印星平和：母亲挂念你却不大包大揽，多是放手让你自己撞，缘分会在你历事之后越发显出深来。"
+              if seal_s > 0 else
+              "印星不现于命局：与母亲缘分早带一分分离之象——或她操劳、或你离家早，越是想念，越聚少离多。")
+    father = ("财星显著：父亲务实、掌得住钱与主张，对你的影响少在言语、多在安排，是行动派不是谈心派。"
+              if fatherwealth_s >= 8 else
+              "财星弱而有：父亲不善表达、话不多，你俩交流有限，谈到钱上才显出他的存在感。"
+              if fatherwealth_s > 0 else
+              "财星不现原局：与父亲缘分偏淡，或成长中他缺席，或始终没谈到一处去，不必强求热络。")
+    palace = ("日支冲月支，父母宫受冲：你注定早离家自立，逢聚必吵、分开反倒惦记，常来少住是相处上策。"
+              if T.is_clash(pillars[2]["zhi"], pillars[1]["zhi"]) else
+              "月令父母宫安稳：家能给你托底，也易裹挟你的选择——大事问过父母，主意仍拿在自己手里。")
+    parents = mother + father + palace
+
     # ---------- 大运总览 ----------
     dayun = chart["dayun"]
     def dy_line(d):
@@ -84,7 +102,7 @@ def fortune(chart):
     return {
         "top_group": top_group, "top_ss": top_ss,
         "personality": personality, "career": career,
-        "romance": romance, "dayun": dayun_overview,
+        "romance": romance, "parents": parents, "dayun": dayun_overview,
     }
 
 
@@ -275,5 +293,6 @@ def summary_text(chart, f=None):
 性格：{f['personality']}
 事业：{f['career']}
 感情：{f['romance']}
+父母：{f['parents']}
 大运：{dayun_now}{f['dayun']}
 关键流年：{key}{history}"""

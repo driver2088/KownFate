@@ -67,8 +67,22 @@ function setView(name) {
   if (name === "chat") refreshChatShell();
   if (name === "archive") loadArchive();
   if (name === "chart" && !S.payload) {
-    if (S.user && S.hasFinal === false) setView("onboard");
+    $("#chartBody").innerHTML = `<div class="card chart-empty">
+      <p>命盘虚位以待——填写生辰信息即可起局。</p>
+      <button class="btn-gold" onclick="openOnboard()">填 写 生 辰 · 起 盘</button>
+    </div>`;
+    if (S.user) openOnboard();
   }
+}
+
+/* ---------- 排盘信息弹窗 ---------- */
+function openOnboard() {
+  $("#onboardModal").hidden = false;
+  setTimeout(() => $("#obDate").focus({ preventScroll: true }), 60);
+}
+function closeOnboard() {
+  $("#onboardModal").hidden = true;
+  $("#obNotice").hidden = true;
 }
 
 /* ============================================================
@@ -90,11 +104,18 @@ function openAuth(mode) {
   setTimeout(() => $("#authEmail").focus(), 60);
 }
 function closeAuth() { $("#authModal").hidden = true; $("#authMsg").textContent = ""; }
-$("#heroStart").addEventListener("click", () => openAuth());
+$("#heroStart").addEventListener("click", () => {
+  if (!S.user) return openAuth();
+  setView("chart");          // 已登录：无命盘者由命盘页自动弹出排盘表单
+});
 $("#loginBtn").addEventListener("click", () => openAuth());
 $("#authClose").addEventListener("click", closeAuth);
 $("#authModal").addEventListener("click", e => { if (e.target === $("#authModal")) closeAuth(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeAuth(); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") { closeAuth(); closeOnboard(); }
+});
+$("#obClose").addEventListener("click", closeOnboard);
+$("#onboardModal").addEventListener("click", e => { if (e.target === $("#onboardModal")) closeOnboard(); });
 
 $("#authForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -125,11 +146,12 @@ $("#logoutBtn").addEventListener("click", () => {
   $("#logoutBtn").hidden = true; $("#userChip").hidden = true; $("#mainNav").hidden = true;
   $("#loginBtn").hidden = false;
   closeAuth();
+  closeOnboard();
   setView("landing");
 });
 $("#brandHome").addEventListener("click", () => {
   if (!S.user) return setView("landing");
-  setView(S.hasFinal ? "chart" : "onboard");
+  setView("chart");
 });
 
 async function afterLogin() {
@@ -145,7 +167,7 @@ async function afterLogin() {
     renderChart(true);
     setView("chart");
   } else {
-    setView("onboard");
+    setView("chart");   // 尚无命盘：落到命盘页并自动弹出排盘信息弹窗
   }
 }
 
@@ -206,9 +228,10 @@ $("#obStart").addEventListener("click", async () => {
     S.answers = {};
     renderChart(false);
     setView("chart");
+    closeOnboard();
     window.scrollTo({ top: 0 });
   } catch (err) {
-    if (err.status === 401) return setView("landing");
+    if (err.status === 401) { closeOnboard(); return setView("landing"); }
     toast(err.message);
   } finally {
     overlay(false);
@@ -311,10 +334,10 @@ function renderChart(confirmed) {
   /* --- 命格断语 --- */
   const f = p.fortune;
   html += `<div class="fortune-grid">
-    <div class="fortune-block"><h5>性 情</h5><p>${esc(f.personality)}</p></div>
+    <div class="fortune-block"><h5>性 格</h5><p>${esc(f.personality)}</p></div>
+    <div class="fortune-block"><h5>父 母</h5><p>${esc(f.parents)}</p></div>
     <div class="fortune-block"><h5>事 业</h5><p>${esc(f.career)}</p></div>
     <div class="fortune-block"><h5>姻 缘</h5><p>${esc(f.romance)}</p></div>
-    <div class="fortune-block"><h5>大 运</h5><p>${esc(f.dayun)}</p></div>
   </div>`;
 
   /* --- 校验面板 or 定案入口 --- */
@@ -324,6 +347,7 @@ function renderChart(confirmed) {
     html += `<div class="card" style="text-align:center">
       <p style="font-size:14px;color:var(--ink-soft);margin-bottom:18px">命格已定案存档。此时不知命，更待何时——</p>
       <button class="btn-gold" onclick="gotoChat()">携 命 格 · 问 AI 先 生</button>
+      <button class="btn-ghost" style="margin-left:12px" onclick="openOnboard()">另 排 一 盘</button>
     </div>`;
   }
 
@@ -417,7 +441,7 @@ async function submitVerify() {
       }
       const n = $("#obNotice");
       n.textContent = res.message; n.hidden = false;
-      setView("onboard");
+      setView("chart");   // 空命盘页 + 自动弹出排盘弹窗（携原信息与提示）
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
       S.payload = res; S.answers = {};
@@ -629,10 +653,7 @@ async function viewArchivedChart(id) {
 }
 
 /* ---------- 导航 ---------- */
-$$(".nav-tab").forEach(btn => btn.addEventListener("click", () => {
-  if (btn.dataset.view === "chart" && !S.payload) return setView("onboard");
-  setView(btn.dataset.view);
-}));
+$$(".nav-tab").forEach(btn => btn.addEventListener("click", () => setView(btn.dataset.view)));
 
 /* ============================================================
    启动
