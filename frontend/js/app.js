@@ -296,7 +296,7 @@ function renderChart(confirmed) {
 
   /* --- 大运 --- */
   const thisYear = new Date().getFullYear();
-  html += `<div class="card dayun-wrap panel"><h4>大运 · ${c.qiyun.age}岁起运（${c.qiyun.date}）</h4>
+  html += `<div class="card dayun-wrap panel"><h4>大运 · 十年一度 · ${c.qiyun.age}岁起运（${c.qiyun.date}）</h4>
     <div class="dayun-scroll">
     ${c.dayun.slice(0, 9).map(d => `
       <div class="dayun-card${d.start_year <= thisYear && thisYear < d.end_year ? " current" : ""}">
@@ -307,19 +307,6 @@ function renderChart(confirmed) {
       </div>`).join("")}
     </div></div>`;
 
-  /* --- 关键流年 --- */
-  html += `<div class="card panel" style="margin-bottom:26px"><h4>关键流年 · 未来十载</h4>
-    <ul class="key-years">
-    ${c.key_years.map(k => `
-      <li>
-        <span class="ky-year">${k.year}<small>${k.ganzhi}年 · ${k.gan_shishen}</small></span>
-        <span class="ky-notes">${k.notes.map(esc).join("；") || "平稳之年，按部就班"}
-          <span class="ky-tag ${k.score > 0 ? "good" : k.score < 0 ? "bad" : ""}">${k.score > 0 ? "吉" : k.score < 0 ? "慎" : "平"}</span>
-        </span>
-      </li>`).join("")}
-    </ul>
-    <p class="hint">流年吉凶以喜用${xy.yong_shen}、忌${xy.ji_shen.join("、")}为纲，兼察六冲桃花。</p>
-  </div>`;
 
   /* --- 命格断语 --- */
   const f = p.fortune;
@@ -357,7 +344,8 @@ function renderVerifyPanel() {
   const p = S.payload;
   return `<div class="card verify-panel" id="verifyPanel">
     <div class="verify-title"><h3>命格校验 · 第 ${p.round} 轮</h3>
-      <span>${p.statements.length} 题（性情际遇 ×2 · 大运流年 ×3）</span></div>
+      <span>${p.statements.length} 题 · ${p.statements.every(s => s.category === "流年")
+        ? "皆为已发生的关键流年，凭记忆可核对" : "性情际遇与岁运判断"}</span></div>
     <p class="verify-desc">${ROUND_FOCUS[p.round] || ""}——以下断语皆由你的四柱推演而来，请逐条核对。
       <b>5 题至少 4 题符合即定案</b>；未达标时，你的校验结果将交 AI 依子平命理重新核定强弱与喜用，必要时更换推算方法重算。
       <b>三轮打磨仍未达标则本次不予存档</b>——请核对出生日期与时辰后重新提交。</p>

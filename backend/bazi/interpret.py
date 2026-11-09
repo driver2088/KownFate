@@ -123,18 +123,57 @@ def _dayun_claim_text(d, chart):
             f"{body}，{extra}。")
 
 
-def statements(chart):
-    """五道校验题：1 性格、2 事业或感情（择主导之星）、3-5 关键大运流年判断。"""
-    dm = chart["day_master"]
+_LN_CLAIM = {
+    "clash": lambda p: (f"{p['year']}年（{p['ganzhi']}，约{p['age']}岁）岁运冲动你的日支或月令，"
+                        f"那一年工作、住所或感情里多半起过一次明显的变动，甚至动过推倒重来的念头。"),
+    "neg2": lambda p: (f"{p['year']}年（{p['ganzhi']}，约{p['age']}岁）忌神当头，那一年阻力格外大——"
+                       f"事情推进吃力，财务或人际上有过一段紧绷期。"),
+    "pos2": lambda p: (f"{p['year']}年（{p['ganzhi']}，约{p['age']}岁）喜用得力，那一年你做成过一件"
+                       f"至今仍有回响的事：职位、置业、一段关系的确立，或一笔像样的进账。"),
+    "pos1": lambda p: (f"{p['year']}年（{p['ganzhi']}，约{p['age']}岁）前后机会明显变多，你有过一段"
+                       f"做事格外顺手的日子，也留下过一个当时没接住、如今想起仍会咂摸的机会。"),
+    "other": lambda p: (f"{p['year']}年（{p['ganzhi']}，约{p['age']}岁）在你命局里是个换挡的年份——"
+                        f"它之前和之后，你的生活轨迹明显换了方向。"),
+}
+
+
+def _ln_trait(p):
+    if p.get("clash") and p["score"] <= 0:
+        return "clash"
+    if p["score"] <= -2:
+        return "neg2"
+    if p["score"] >= 2:
+        return "pos2"
+    if p["score"] >= 1:
+        return "pos1"
+    return "other"
+
+
+def _liunian_statements(chart):
+    """五题正体：全部取成年后已发生的流年，凭记忆可核对。"""
+    past = chart.get("past_years") or []
+    order = {"clash": 0, "pos2": 1, "neg2": 2, "pos1": 3, "other": 4}
+    ranked = sorted(past, key=lambda p: (-(abs(p["score"]) + (2 if p.get("clash") else 0)), -p["year"]))
+    picked, used = [], set()
+    for trait in order:  # 先按类型各取一年，保证题面多样
+        cand = next((p for p in ranked if _ln_trait(p) == trait and p["year"] not in used
+                     and all(abs(p["year"] - q) >= 2 for q in used)), None)
+        if cand:
+            picked.append((trait, cand)); used.add(cand["year"])
+    for p in ranked:     # 不足五题再以信号最强年份补齐
+        if len(picked) >= 5:
+            break
+        if p["year"] not in used:
+            picked.append((_ln_trait(p), p)); used.add(p["year"])
+    return [{"category": "流年", "text": _LN_CLAIM[trait](p)} for trait, p in picked[:5]]
+
+
+def _classic_statements(chart):
+    """后备题面（命主太年轻、可核对流年不足五事时补位）：性格、事业或感情、大运。"""
     f = fortune(chart)
     strength = chart["strength"]
-
-    s = []
-    # ---- 题1：性格 ----
-    s.append({"category": "性格", "text":
-        f"命局显示你{strength['detail']}——做决断时，你多半是'{_decide_line(strength['level'])}'这一挂的。"})
-
-    # ---- 题2：事业或感情（取力量较著一面）----
+    s = [{"category": "性格", "text":
+        f"命局显示你{strength['detail']}——做决断时，你多半是'{_decide_line(strength['level'])}'这一挂的。"}]
     career_force = f["top_group"] in ("官杀", "财星", "食伤")
     if career_force:
         s.append({"category": "事业", "text":
@@ -143,65 +182,42 @@ def statements(chart):
     else:
         s.append({"category": "感情", "text":
             f"你的感情模式：{f['romance'].split(' ')[0]}——这一点，身边的亲密关系应该最有发言权。"})
-
-    # ---- 题3-5：关键大运流年 ----
-    up = chart.get("verify_year_upheaval")
-    sm = chart.get("verify_year_smooth")
     d_cur = _current_dayun(chart)
-
     if d_cur and d_cur["start_year"] <= datetime.now().year - 3:
         s.append({"category": "大运", "text": _dayun_claim_text(d_cur, chart)})
     elif len(chart["dayun"]) >= 2:
         d = chart["dayun"][1]
         s.append({"category": "大运", "text":
             f"{d['start_year']}年起进入{d['ganzhi']}大运后，你的人生节奏相较学生时代有一次明显换挡。"})
-    else:
-        s.append({"category": "大运", "text":
-            f"每逢{'、'.join(str(x['year']) for x in chart['key_years'][:2])}这类喜用流年，"
-            f"你会明显感觉机会变多、做事更容易有回响。"})
-
-    used_years = set()
-    if up and up["year"] not in used_years:
-        used_years.add(up["year"])
-        if up.get("clash"):
-            s.append({"category": "流年", "text":
-                f"{up['year']}年（{up['ganzhi']}，约{up['age']}岁）岁运与你夫妻宫或月令相冲，"
-                f"那一年你工作、住所或感情多半发生过一次明显的变动或波折。"})
-        else:
-            s.append({"category": "流年", "text":
-                f"{up['year']}年（{up['ganzhi']}，约{up['age']}岁）岁运冲撞你的忌神方位，"
-                f"那一年明显诸事费力、压力上身，甚至有过一次想推倒重来的念头。"})
-    elif sm:
+    up = chart.get("verify_year_upheaval")
+    sm = chart.get("verify_year_smooth")
+    if up:
+        s.append({"category": "流年", "text":
+            f"{up['year']}年（{up['ganzhi']}，约{up['age']}岁）前后，你经历过一次旁人看来不大、"
+            f"你自己却记到今天的事。"})
+    if sm:
         s.append({"category": "流年", "text":
             f"{sm['year']}年（{sm['ganzhi']}，约{sm['age']}岁）喜用得力，"
-            f"那一年你顺风顺水，做成过一件到现在仍有影响的事。"})
-    else:
-        past = chart.get("past_years") or []
-        alt = past[-3] if len(past) >= 3 else None
-        if alt:
-            s.append({"category": "流年", "text":
-                f"{alt['year']}年（{alt['ganzhi']}）前后，你经历过一次旁人看来不大、你自己却记到今天的事。"})
-        else:
-            s.append({"category": "流年", "text":
-                f"逢冲夫妻宫或月令的流年，你生活里多半有过一次搬家、换城或分手级别的变动。"})
-
-    if sm and sm["year"] not in used_years:
-        used_years.add(sm["year"])
-        s.append({"category": "流年", "text":
-            f"{sm['year']}年（{sm['ganzhi']}，约{sm['age']}岁）岁干支皆入喜用，那一年你做成过"
-            f"一件到现在仍有回响的事——升职、置业、成家或一段关系的确定。"})
-    else:
+            f"你做成过一件到现在仍有影响的事。"})
+    if len(s) < 5:
+        adv = chart["xiyong"]["advice"]
+        s.append({"category": "际遇", "text":
+            f"总体上你在逢{'、'.join(adv['direction'])}之方、{'、'.join(adv['color'])}色系年份节奏更顺，"
+            f"回头验证应有体会。"})
+    if len(s) < 5:
         fut = [x for x in chart["liunian_all"] if x["score"] >= 1]
-        if fut:
-            s.append({"category": "流年", "text":
-                f"{fut[0]['year']}年（{fut[0]['ganzhi']}）喜用到位，是你近年里值得一搏机会的一年，"
-                f"此前类似年份你也有过抓住机会的手感。"})
-        else:
-            s.append({"category": "流年", "text":
-                f"总体上你在逢{'、'.join(chart['xiyong']['advice']['direction'])}之方、"
-                f"{'、'.join(chart['xiyong']['advice']['color'])}色系年份节奏更顺，回头验证应有体会。"})
+        nxt = fut[0]["year"] if fut else datetime.now().year + 1
+        s.append({"category": "流年", "text":
+            f"{nxt}年前后会有一个值得主动争取的窗口——你以往抓住机会的手感，届时再用一次。"})
+    return s
 
-    return [{"id": i + 1, **item} for i, item in enumerate(s[:5])]
+
+def statements(chart):
+    """五道校验题：采用 5 个可核对的关键流年判断；流年池不足时以性情/大运断语补位。"""
+    items = _liunian_statements(chart)
+    if len(items) < 5:
+        items = items + _classic_statements(chart)[:5 - len(items)]
+    return [{"id": i + 1, **item} for i, item in enumerate(items[:5])]
 
 
 def verify_feedback_text(statements, answers):
